@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.12.35527.113
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Banking.Onboarding", "Banking.Onboarding\src\Banking.Onboarding\Banking.Onboarding.csproj", "{84C67E8A-16FC-4B30-B97A-FA8965D8FD56}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Onboarding", "Onboarding", "{ECB62766-788B-4846-8FDD-6809FE192B35}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Banking.Onboarding.Domain", "Banking.Onboarding.Domain\Banking.Onboarding.Domain.csproj", "{F9C41F85-4538-45AC-A2E9-72C2B82C8E39}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Banking.Onboarding.Infrastructure", "Banking.Onboarding.Infrastructure\Banking.Onboarding.Infrastructure.csproj", "{82EAD1E1-C4E3-4C55-8690-4AF280F922CA}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Mocks", "Mocks", "{0F56F25A-E95C-4720-876A-7B75D67ECA88}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mock.DocumentoscopyService", "Mock.DocumentoscopyService\src\Mock.DocumentoscopyService\Mock.DocumentoscopyService.csproj", "{DE6E5C93-361C-4E53-AE61-A1845E711041}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{84C67E8A-16FC-4B30-B97A-FA8965D8FD56}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{84C67E8A-16FC-4B30-B97A-FA8965D8FD56}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{84C67E8A-16FC-4B30-B97A-FA8965D8FD56}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{84C67E8A-16FC-4B30-B97A-FA8965D8FD56}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F9C41F85-4538-45AC-A2E9-72C2B82C8E39}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F9C41F85-4538-45AC-A2E9-72C2B82C8E39}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F9C41F85-4538-45AC-A2E9-72C2B82C8E39}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F9C41F85-4538-45AC-A2E9-72C2B82C8E39}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82EAD1E1-C4E3-4C55-8690-4AF280F922CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82EAD1E1-C4E3-4C55-8690-4AF280F922CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82EAD1E1-C4E3-4C55-8690-4AF280F922CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82EAD1E1-C4E3-4C55-8690-4AF280F922CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DE6E5C93-361C-4E53-AE61-A1845E711041}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DE6E5C93-361C-4E53-AE61-A1845E711041}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DE6E5C93-361C-4E53-AE61-A1845E711041}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DE6E5C93-361C-4E53-AE61-A1845E711041}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{84C67E8A-16FC-4B30-B97A-FA8965D8FD56} = {ECB62766-788B-4846-8FDD-6809FE192B35}
+		{F9C41F85-4538-45AC-A2E9-72C2B82C8E39} = {ECB62766-788B-4846-8FDD-6809FE192B35}
+		{82EAD1E1-C4E3-4C55-8690-4AF280F922CA} = {ECB62766-788B-4846-8FDD-6809FE192B35}
+		{DE6E5C93-361C-4E53-AE61-A1845E711041} = {0F56F25A-E95C-4720-876A-7B75D67ECA88}
+	EndGlobalSection
+EndGlobal

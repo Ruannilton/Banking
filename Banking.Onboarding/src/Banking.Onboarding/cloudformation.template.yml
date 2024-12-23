@@ -1,0 +1,360 @@
+Resources:
+  DocumentIdentityBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: onboarding-identity-documents
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+  DocumentIdentityBucketBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DocumentIdentityBucket
+      PolicyDocument:
+        Id: RequireEncryptionInTransit
+        Version: '2012-10-17'
+        Statement:
+          - Principal: '*'
+            Action: '*'
+            Effect: Deny
+            Resource:
+              - !GetAtt DocumentIdentityBucket.Arn
+              - !Sub ${DocumentIdentityBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+  DocumentoscopyResponseQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: DocumentoscopyResponseQueue
+      MessageRetentionPeriod: 345600
+  OnboardingEventQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: OnboardingEventQueue
+      MessageRetentionPeriod: 345600
+      FifoQueue: true
+      ContentBasedDeduplication: true
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub
+        - ${ResourceName} From Stack ${AWS::StackName}
+        - ResourceName: Api
+      StageName: Prod
+      DefinitionBody:
+        openapi: '3.0'
+        info: {}
+        paths:
+          /documentoscopy-callback:
+            post:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaOnboardingReceiveDocumentoscopyResponse.Arn}/invocations
+              responses: {}
+          /costumer-validation:
+            post:
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws_proxy
+                uri: !Sub arn:${AWS::Partition}:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaOnboardingGenerateUploadLink.Arn}/invocations
+              responses: {}
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+      Cors:
+        MaxAge: 5
+  OnboardingCustomerInfo:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: OnboardingCustomerInfo
+      AttributeDefinitions:
+        - AttributeName: cpf
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: cpf
+          KeyType: HASH
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+  BankingUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      AutoVerifiedAttributes:
+        - email
+  OnboardingEventsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: OnboardingEventsTopic
+      FifoTopic: true
+      ContentBasedDeduplication: true
+      Subscription:
+        - Endpoint: !GetAtt EmailQueue.Arn
+          Protocol: sqs
+  EmailQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: OnboardingEmailQueue
+      FifoQueue: true
+      ContentBasedDeduplication: true
+      MessageRetentionPeriod: 345600
+  OnboardingEventsTopicToEmailQueueConnector:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Resource: !GetAtt EmailQueue.Arn
+            Action: sqs:SendMessage
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref OnboardingEventsTopic
+        Version: '2012-10-17'
+      Queues:
+        - !Ref EmailQueue
+  CognitoUserPoolResources:
+    Type: AWS::Cognito::UserPoolResourceServer
+    Properties:
+      Identifier: users
+      Name: Users Api
+      Scopes:
+        - ScopeName: banking
+          ScopeDescription: Banking Api
+      UserPoolId: !Ref BankingUserPool
+  BankingClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: CognitoUserPoolResources
+    Properties:
+      ClientName: BankingClient
+      UserPoolId: !Ref BankingUserPool
+      GenerateSecret: true
+      AllowedOAuthFlows:
+        - client_credentials
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+      AllowedOAuthScopes:
+        - users/banking
+      AllowedOAuthFlowsUserPoolClient: true
+      RefreshTokenValidity: 1
+  LambdaOnboardingEmailDispatcher:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+    Properties:
+      Runtime: dotnet8
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OnboardingCustomerInfo
+      PackageType: Zip
+      Handler: Banking.Onboarding::Banking.Onboarding.Lambdas.EmailDispatcher_Dispatch_Generated::Dispatch
+      Events:
+        EmailQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt EmailQueue.Arn
+            BatchSize: 1
+      Environment:
+        Variables:
+          EMAIL_SENDER_ADDRESS: ruannilton.dev@gmail.com
+  LambdaOnboardingReceiveDocumentoscopyResponse:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+      SyncedEvents:
+        - RootPost
+      SyncedEventProperties:
+        RootPost:
+          - Path
+          - Method
+    Properties:
+      Runtime: dotnet8
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt DocumentoscopyResponseQueue.QueueName
+      PackageType: Zip
+      Handler: Banking.Onboarding::Banking.Onboarding.Lambdas.ReceiveDocumentoscopyResponse_GenerateUploadLink_Generated::GenerateUploadLink
+      Events:
+        RootPost:
+          Type: HttpApi
+          Properties:
+            Path: /documentoscopy-callback
+            Method: POST
+        ApiPOSTdocumentoscopycallback:
+          Type: Api
+          Properties:
+            Path: /documentoscopy-callback
+            Method: POST
+            RestApiId: !Ref Api
+      Environment:
+        Variables:
+          DOCUMENTOSCOPYRESPONSEQUEUE_QUEUE_NAME: !GetAtt DocumentoscopyResponseQueue.QueueName
+          DOCUMENTOSCOPYRESPONSEQUEUE_QUEUE_ARN: !GetAtt DocumentoscopyResponseQueue.Arn
+          DOCUMENTOSCOPYRESPONSEQUEUE_QUEUE_URL: !Ref DocumentoscopyResponseQueue
+  LambdaOnboardingNotificationWorker:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+    Properties:
+      Runtime: dotnet8
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt OnboardingEventsTopic.TopicName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OnboardingCustomerInfo
+      PackageType: Zip
+      Handler: Banking.Onboarding::Banking.Onboarding.Lambdas.NotificationWorker_HandleNotification_Generated::HandleNotification
+      Environment:
+        Variables:
+          ONBOARDINGEVENTSTOPIC_TOPIC_NAME: !GetAtt OnboardingEventsTopic.TopicName
+          ONBOARDINGEVENTSTOPIC_TOPIC_ARN: !Ref OnboardingEventsTopic
+      Events:
+        OnboardingEventQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt OnboardingEventQueue.Arn
+            BatchSize: 1
+  LambdaOnboardingHandleS3UploadEvent:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+    Properties:
+      Runtime: dotnet8
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt OnboardingEventQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OnboardingCustomerInfo
+      PackageType: Zip
+      Handler: Banking.Onboarding::Banking.Onboarding.Lambdas.HandleS3UploadEvent_ListenIdentityDocuments_Generated::ListenIdentityDocuments
+      Environment:
+        Variables:
+          ONBOARDINGEVENTQUEUE_QUEUE_NAME: !GetAtt OnboardingEventQueue.QueueName
+          ONBOARDINGEVENTQUEUE_QUEUE_ARN: !GetAtt OnboardingEventQueue.Arn
+          ONBOARDINGEVENTQUEUE_QUEUE_URL: !Ref OnboardingEventQueue
+          ONBOARDINGIDENTITYBUCKET_BUCKET_NAME: !Ref DocumentIdentityBucket
+          DOCUMENTOSCOPY_SERVICE_ENDPOINT: !Ref DocumentoscopyServiceEndpoint
+      Events:
+        DocumentIdentityBucket:
+          Type: S3
+          Properties:
+            Bucket: !Ref DocumentIdentityBucket
+            Events:
+              - s3:ObjectCreated:Post
+  LambdaOnboardingHandleDocumentoscopyResponse:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+    Properties:
+      Runtime: dotnet8
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt OnboardingEventQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OnboardingCustomerInfo
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:Admin*
+                - cognito-idp:DescribeIdentityProvider
+                - cognito-idp:DescribeResourceServer
+                - cognito-idp:DescribeUserPool
+                - cognito-idp:DescribeUserPoolClient
+                - cognito-idp:DescribeUserPoolDomain
+                - cognito-idp:GetGroup
+                - cognito-idp:ListGroups
+                - cognito-idp:ListUserPoolClients
+                - cognito-idp:ListUsers
+                - cognito-idp:ListUsersInGroup
+                - cognito-idp:UpdateGroup
+              Resource: !GetAtt BankingUserPool.Arn
+      PackageType: Zip
+      Handler: Banking.Onboarding::Banking.Onboarding.Lambdas.HandleDocumentoscopyResponse_HandleMessages_Generated::HandleMessages
+      Events:
+        DocumentoscopyResponseQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt DocumentoscopyResponseQueue.Arn
+            BatchSize: 1
+      Environment:
+        Variables:
+          BANKINGCLIENT_USER_POOL_CLIENT_ID: !Ref BankingClient
+          ONBOARDINGEVENTQUEUE_QUEUE_NAME: !GetAtt OnboardingEventQueue.QueueName
+          ONBOARDINGEVENTQUEUE_QUEUE_ARN: !GetAtt OnboardingEventQueue.Arn
+          ONBOARDINGEVENTQUEUE_QUEUE_URL: !Ref OnboardingEventQueue
+          BANKINGUSERPOOL_USER_POOL_ID: !Ref BankingUserPool
+          BANKINGUSERPOOL_USER_POOL_ARN: !GetAtt BankingUserPool.Arn
+  LambdaOnboardingGenerateUploadLink:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Tool: Amazon.Lambda.Annotations
+      SyncedEvents:
+        - RootPost
+      SyncedEventProperties:
+        RootPost:
+          - Path
+          - Method
+    Properties:
+      Runtime: dotnet8
+      CodeUri: .
+      MemorySize: 512
+      Timeout: 30
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref OnboardingCustomerInfo
+      PackageType: Zip
+      Handler: Banking.Onboarding::Banking.Onboarding.Lambdas.DocumentUploadLink_GenerateUploadLink_Generated::GenerateUploadLink
+      Events:
+        RootPost:
+          Type: HttpApi
+          Properties:
+            Path: /costumer-validation
+            Method: POST
+        ApiPOSTcostumervalidation:
+          Type: Api
+          Properties:
+            Path: /costumer-validation
+            Method: POST
+            RestApiId: !Ref Api
+      Environment:
+        Variables:
+          ONBOARDINGCUSTOMERINFO_TABLE_NAME: !Ref OnboardingCustomerInfo
+          ONBOARDINGCUSTOMERINFO_TABLE_ARN: !GetAtt OnboardingCustomerInfo.Arn
+          ONBOARDINGIDENTITYBUCKET_BUCKET_NAME: !Ref DocumentIdentityBucket
+          EXPIRATION_TIME_IN_MINUTES: 15
+  DocumentoscopyServiceEndpoint:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: https://3hp0oghqy5.execute-api.us-east-1.amazonaws.com/Prod/validate-document
+Transform: AWS::Serverless-2016-10-31
+Description: This template is partially managed by Amazon.Lambda.Annotations (v1.6.2.0).
